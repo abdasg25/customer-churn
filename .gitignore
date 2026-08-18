@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Environment / secrets
+.env
+.env.local
+
+# Jupyter
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Personal planning docs (not part of the deliverable)
+*.docx
+~$*
+
+# Model artifacts / caches
+*.joblib
+*.pkl
+models/
+.cache/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
