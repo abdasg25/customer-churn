@@ -105,9 +105,77 @@ def corr_with_churn(df):
     return corr.abs().sort_values(ascending=False)
 
 
+# Yes/No columns that become 0/1
+BINARY_COLS = ["Partner", "Dependents", "PhoneService", "PaperlessBilling"]
+
+# contract is ordinal: month-to-month is the riskiest, two-year the safest
+CONTRACT_ORDER = {"Month-to-month": 0, "One year": 1, "Two year": 2}
+
+# columns that stay categorical and get one-hot encoded in the model layer
+CATEGORICAL_COLS = ["InternetService", "MultipleLines", "PaymentMethod"]
+
+
+def clean_data(df):
+    """Apply the documented cleaning decisions. Returns (clean_df, log).
+
+    Every rule here is a hardcoded mapping, no fitting/statistics, so it is
+    safe to run on the whole frame before any train/test split (no leakage)."""
+    out = df.copy()
+    log = []
+
+    # total charges: coerce to numeric, fill the 11 tenure==0 blanks with 0
+    out["TotalCharges"] = pd.to_numeric(out["TotalCharges"], errors="coerce")
+    n_blank = int(out["TotalCharges"].isna().sum())
+    out["TotalCharges"] = out["TotalCharges"].fillna(0.0)
+    if n_blank:
+        log.append({
+            "issue": f"TotalCharges is text with {n_blank} blanks (all tenure==0)",
+            "action": "coerce to numeric, fill blanks with 0",
+            "reason": "new customers with no completed billing cycle yet",
+        })
+
+    # internet add-ons: "No internet service" is really just "No", then 0/1
+    n_addons = 0
+    for col in INTERNET_ADDONS:
+        n_addons += int((out[col] == "No internet service").sum())
+        out[col] = out[col].replace("No internet service", "No")
+        out[col] = (out[col] == "Yes").astype(int)
+    if n_addons:
+        log.append({
+            "issue": f"{n_addons} 'No internet service' values across 6 add-on columns",
+            "action": "recode to 'No', then Yes/No -> 1/0",
+            "reason": "semantically identical: customer has no internet",
+        })
+
+    # target and the other binary Yes/No columns
+    out["Churn"] = (out["Churn"] == "Yes").astype(int)
+    for col in BINARY_COLS:
+        out[col] = (out[col] == "Yes").astype(int)
+
+    # gender -> 0/1 (which side is 1 is arbitrary, just keep it consistent)
+    out["gender"] = (out["gender"] == "Male").astype(int)
+
+    # contract ordinal
+    out["Contract"] = out["Contract"].map(CONTRACT_ORDER)
+    log.append({
+        "issue": "Contract is ordinal (month-to-month < one year < two year)",
+        "action": "map to 0/1/2",
+        "reason": "ordering correlates with churn risk, a plain dummy would lose that",
+    })
+
+    return out, log
+
+
 if __name__ == "__main__":
     import json
 
     raw = load_data()
     report = audit_data(raw)
     print(json.dumps(report, indent=2, default=str))
+
+    clean, log = clean_data(raw)
+    print("\ncleaning log:")
+    for entry in log:
+        print(" -", entry["issue"], "=>", entry["action"])
+    print("\nclean dtypes:")
+    print(clean.dtypes.to_string())
