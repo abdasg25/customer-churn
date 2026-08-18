@@ -17,8 +17,12 @@ where it is applied.
 - After numeric coercion, **11 rows become null**.
 - Every one of those 11 rows has `tenure = 0` → they are brand-new customers
   with no bill generated yet.
-- **Missingness mechanism:** NOT missing-at-random. Missing billing correlates
-  perfectly with `tenure = 0`. This is a finding, not just an imputation step.
+- **Missingness mechanism (MNAR, structural):** the 11 blanks are *exactly* the
+  11 `tenure == 0` rows — a one-to-one match. Every one of them is `Churn = No`.
+  The mechanism is a data-collection rule ("no completed billing cycle yet"),
+  not randomness and not the churn outcome itself. Classified MNAR because the
+  missingness is determined by another variable (`tenure`), which makes it a
+  *finding* worth documenting, not something to silently impute.
 - **Decision (Task 5):** fill `TotalCharges = 0` for these 11 rows (tenure 0 =
   no completed billing cycle yet). Alternative is to drop them (0.16% of the
   data) or fill with `MonthlyCharges` (the first month's bill). Going with 0
@@ -54,6 +58,15 @@ where it is applied.
   prediction time, so it is not a post-churn proxy — safe to keep.
 - **Decision:** no columns dropped for leakage. The hunt is documented so the
   reasoning is auditable.
+- `customerID` is a unique identifier per row (7,043 unique = nrows). It carries
+  no signal and would only let a model memorize rows, so it is **excluded from
+  the model features** but kept in the dataframe for lookup by ID (the agent
+  needs it for `predict_churn_risk(customer_id)`).
+- `TotalCharges` correlates 0.83 with `tenure` — that's *redundancy*, not
+  leakage. It is kept because it also carries plan-change information `tenure`
+  alone does not; revisited in feature selection (Task 5).
+- `tenure`, `MonthlyCharges`, `SeniorCitizen` are all measured before the churn
+  outcome and are safe predictors.
 
 ## Sanity checks that passed
 - `tenure` range 0–72 (valid: 0 = new customer, 72 = 6-year tenure).
