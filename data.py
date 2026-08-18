@@ -37,8 +37,7 @@ def audit_data(df):
         "numeric_ranges": {},
     }
 
-    # total charges comes in as text, not numeric. the blank cells only show up
-    # as NaN after we coerce it
+    # total charges comes in as text, not numeric. the blank cells only show up as NaN after we coerce it
     tc = pd.to_numeric(df["TotalCharges"], errors="coerce")
     report["totalcharges_dtype_original"] = str(df["TotalCharges"].dtype)
     report["totalcharges_blank_count"] = int(tc.isna().sum())
@@ -69,14 +68,14 @@ def audit_data(df):
         round(float(tc.max()), 2),
     ]
 
-    # explicit leakage hunt: names that would encode the label after the fact
+    # names that encode the label after the fact
     leakage_names = ["cancellation_date", "cancel", "days_since_last_login",
                      "account_status", "churn_date"]
     report["leakage_candidates"] = [
         c for c in df.columns if any(k in c.lower() for k in leakage_names)
     ]
 
-    # trailing/leading whitespace in any string column
+    # trailing whitespace in any string column
     str_cols = df.select_dtypes(include=["object", "string"]).columns
     report["stripped_counts"] = {
         c: int((df[c].astype(str).str.strip() != df[c].astype(str)).sum())
@@ -85,6 +84,25 @@ def audit_data(df):
     }
 
     return report
+
+
+def churn_rate_by(df, col):
+    """churn rate + counts per category, sorted by rate."""
+    out = (
+        df.groupby(col)["Churn"]
+        .agg(total="count", churned=lambda s: (s == "Yes").sum())
+        .assign(churn_rate=lambda d: d.churned / d.total)
+        .sort_values("churn_rate", ascending=False)
+    )
+    return out
+
+
+def corr_with_churn(df):
+    """correlation of numeric columns vs churn (Yes=1), abs sorted."""
+    num = df.select_dtypes(include="number").copy()
+    num["churn"] = (df["Churn"] == "Yes").astype(int)
+    corr = num.corr()["churn"].drop("churn")
+    return corr.abs().sort_values(ascending=False)
 
 
 if __name__ == "__main__":
