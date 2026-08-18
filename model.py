@@ -3,8 +3,10 @@
 from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import average_precision_score, f1_score, precision_score, recall_score
+from sklearn.model_selection import RandomizedSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from xgboost import XGBClassifier
 
 from data import CATEGORICAL_COLS
 
@@ -76,6 +78,38 @@ def train_logistic_baseline(X_train_enc, y_train, X_test_enc, y_test, threshold=
     clf.fit(X_train_enc, y_train)
     proba = clf.predict_proba(X_test_enc)[:, 1]
     return classification_report_churn(y_test, proba, threshold=threshold)
+
+
+def train_model(X_train_enc, y_train, X_test_enc, y_test, threshold=0.5):
+    """xgboost with scale_pos_weight for the imbalance + a small CV search.
+
+    search is run on the train set only (cv folds inside train), test is held
+    out untouched until the end."""
+    scale = float((y_train == 0).sum() / (y_train == 1).sum())
+
+    param_grid = {
+        "max_depth": [3, 5, 7],
+        "learning_rate": [0.05, 0.1, 0.2],
+        "n_estimators": [100, 200],
+        "subsample": [0.8, 1.0],
+    }
+    base = XGBClassifier(
+        scale_pos_weight=scale,
+        objective="binary:logistic",
+        eval_metric="logloss",
+        random_state=42,
+    )
+    search = RandomizedSearchCV(
+        base, param_grid, n_iter=15, cv=3, scoring="f1", random_state=42,
+    )
+    search.fit(X_train_enc, y_train)
+
+    best = search.best_estimator_
+    proba = best.predict_proba(X_test_enc)[:, 1]
+    metrics = classification_report_churn(y_test, proba, threshold=threshold)
+    metrics["best_params"] = search.best_params_
+    metrics["scale_pos_weight"] = round(scale, 3)
+    return best, metrics
 
 
 def predict_churn_risk(customer_id_or_features) -> dict:
