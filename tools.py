@@ -10,8 +10,6 @@ import json
 import numpy as np
 import pandas as pd
 
-TOOLS = []
-
 # builtins the agent's generated code is allowed to use. anything not listed
 # here raises NameError, so eval/open/__import__ etc. are unavailable by default.
 SAFE_BUILTINS = {
@@ -119,3 +117,93 @@ def run_data_query(code):
     elif isinstance(result, pd.Series):
         info["length"] = int(len(result))
     return info
+
+
+def _call_predict(args):
+    """dispatch predict_churn_risk on customer_id or a hypothetical features dict."""
+    from model import predict_churn_risk
+
+    if args.get("customer_id"):
+        return predict_churn_risk(args["customer_id"])
+    if args.get("features"):
+        return predict_churn_risk(args["features"])
+    raise ValueError("provide either customer_id or features")
+
+
+def _call_schema(args=None):
+    """describe the dataset so the agent doesn't guess column names."""
+    df = _df()
+    return {
+        "n_rows": int(len(df)),
+        "n_columns": int(len(df.columns)),
+        "columns": [
+            {"name": c, "dtype": str(df[c].dtype), "sample": df[c].dropna().unique()[:5].tolist()}
+            for c in df.columns
+        ],
+    }
+
+
+# name -> python function. the agent only ever sees TOOLS (the schemas) + results.
+TOOL_FUNCTIONS = {
+    "predict_churn_risk": _call_predict,
+    "run_data_query": run_data_query,
+    "get_dataset_schema": _call_schema,
+}
+
+TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "predict_churn_risk",
+            "description": (
+                "Predict the probability a customer churns. Pass EITHER customer_id "
+                "(string, an existing customerID from the dataset) OR features (an object "
+                "of the customer's attributes in raw schema). Returns risk_score (0-1), "
+                "prediction_class ('Churn'/'Stay'), and top_factors (what drove the score)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "customer_id": {"type": "string", "description": "existing customerID to look up"},
+                    "features": {
+                        "type": "object",
+                        "description": (
+                            "full set of 19 raw features: gender, SeniorCitizen, Partner, "
+                            "Dependents, tenure, PhoneService, MultipleLines, InternetService, "
+                            "OnlineSecurity, OnlineBackup, DeviceProtection, TechSupport, "
+                            "StreamingTV, StreamingMovies, Contract, PaperlessBilling, "
+                            "PaymentMethod, MonthlyCharges, TotalCharges"
+                        ),
+                    },
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_data_query",
+            "description": (
+                "Run a pandas expression against the dataset (variable 'df', plus pd and np). "
+                "Use for aggregations, filters, group-bys, correlations, distributions. "
+                "The Churn column is 'Yes'/'No'. If unsure of column names, call "
+                "get_dataset_schema first. Returns the result string or an error."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string", "description": "pandas expression to evaluate"},
+                },
+                "required": ["code"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_dataset_schema",
+            "description": "Return the dataset's columns, dtypes, sample values, and row count.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+]

@@ -161,6 +161,20 @@ def _shap_top_factors(explainer, X_row, feature_names, top_k):
     return [{"feature": f, "contribution": round(float(c), 4)} for f, c in contribs]
 
 
+def _prettify(feature):
+    """turn encoded feature names back into readable ones.
+
+    remainder__Contract -> Contract, cat__InternetService_Fiber optic ->
+    InternetService = Fiber optic."""
+    if feature.startswith("remainder__"):
+        return feature.split("__", 1)[1]
+    if feature.startswith("cat__"):
+        rest = feature.split("__", 1)[1]
+        col, val = rest.split("_", 1)
+        return f"{col} = {val}"
+    return feature
+
+
 def explain_prediction(model, X_row, feature_names, top_k=5):
     """standalone shap helper (notebook) - builds its own explainer."""
     import shap  # lazy: only needed when we actually explain something
@@ -235,6 +249,8 @@ def predict_churn_risk(customer_id_or_features, top_k=5) -> dict:
     risk = max(0.0, min(1.0, risk))
 
     factors = _shap_top_factors(state["explainer"], X_enc, state["feature_names"], top_k)
+    for f in factors:
+        f["feature"] = _prettify(f["feature"])
 
     return {
         "customer_id": customer_id,
