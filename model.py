@@ -1,8 +1,10 @@
 """Train/load the churn model, expose predict_churn_risk()."""
 
 from sklearn.compose import ColumnTransformer
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import average_precision_score, f1_score, precision_score, recall_score
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from data import CATEGORICAL_COLS
 
@@ -60,6 +62,20 @@ def majority_class_baseline(y_true):
         "recall_churn": 0.0,
         "f1_churn": 0.0,
     }
+
+
+def train_logistic_baseline(X_train_enc, y_train, X_test_enc, y_test, threshold=0.5):
+    """logistic regression + scaling as the linear baseline.
+
+    trees don't care about feature scale, logistic does, so the scaler lives
+    here rather than in the shared preprocessor."""
+    clf = Pipeline([
+        ("scale", StandardScaler()),
+        ("lr", LogisticRegression(class_weight="balanced", max_iter=2000, random_state=42)),
+    ])
+    clf.fit(X_train_enc, y_train)
+    proba = clf.predict_proba(X_test_enc)[:, 1]
+    return classification_report_churn(y_test, proba, threshold=threshold)
 
 
 def predict_churn_risk(customer_id_or_features) -> dict:
