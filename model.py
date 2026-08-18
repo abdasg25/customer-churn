@@ -1,6 +1,8 @@
 """Train/load the churn model, expose predict_churn_risk()."""
 
+import joblib
 import numpy as np
+import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
@@ -16,7 +18,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from xgboost import XGBClassifier
 
-from data import CATEGORICAL_COLS
+from data import CATEGORICAL_COLS, CONTRACT_ORDER, clean_data, load_data, split_data
 
 MODEL_PATH = "models/churn_model.joblib"
 PREPROC_PATH = "models/preprocessor.joblib"
@@ -147,13 +149,8 @@ def feature_importance_global(model, feature_names, top_k=None):
     return [{"feature": f, "importance": round(float(i), 4)} for f, i in pairs]
 
 
-def explain_prediction(model, X_row, feature_names, top_k=5):
-    """per-row shap values -> the factors that pushed risk up or down.
-
-    values are log-odds contributions: positive pushes risk up, negative down."""
-    import shap  # lazy: only needed when we actually explain something
-
-    explainer = shap.TreeExplainer(model)
+def _shap_top_factors(explainer, X_row, feature_names, top_k):
+    """shap values -> top contributions (log-odds), shared by both explain paths."""
     sv = explainer.shap_values(X_row)
     if isinstance(sv, list):
         sv = sv[1]
@@ -164,5 +161,94 @@ def explain_prediction(model, X_row, feature_names, top_k=5):
     return [{"feature": f, "contribution": round(float(c), 4)} for f, c in contribs]
 
 
-def predict_churn_risk(customer_id_or_features) -> dict:
-    raise NotImplementedError
+def explain_prediction(model, X_row, feature_names, top_k=5):
+    """standalone shap helper (notebook) - builds its own explainer."""
+    import shap  # lazy: only needed when we actually explain something
+
+    return _shap_top_factors(shap.TreeExplainer(model), X_row, feature_names, top_k)
+
+
+# ---- model-as-tool: predict_churn_risk is the only public entry point ----
+
+_state = {}
+
+
+def save_artifacts(model, pre):
+    import os
+
+    os.makedirs("models", exist_ok=True)
+    joblib.dump(model, MODEL_PATH)
+    joblib.dump(pre, PREPROC_PATH)
+
+
+def load_state():
+    """lazy-load the trained model + preprocessor + cleaned df, cached once."""
+    if not _state:
+        _state["model"] = joblib.load(MODEL_PATH)
+        _state["pre"] = joblib.load(PREPROC_PATH)
+        _state["clean_df"] = clean_data(load_data())[0]
+        _state["feature_cols"] = [
+            c for c in _state["clean_df"].columns if c not in ("customerID", "Churn")
+        ]
+        _state["feature_names"] = _state["pre"].get_feature_names_out()
+        import shap
+        _state["explainer"] = shap.TreeExplainer(_state["model"])
+    return _state
+
+
+def _row_from_dict(features, feature_cols):
+    """build a clean feature row from a hypothetical dict in raw CSV schema."""
+    missing = [c for c in feature_cols if c not in features]
+    if missing:
+        raise ValueError(f"missing features: {missing}")
+    if features.get("Contract") not in CONTRACT_ORDER:
+        raise ValueError(
+            f"Contract must be one of {list(CONTRACT_ORDER)}, got {features.get('Contract')!r}"
+        )
+    # clean_data wants a Churn column; add a dummy and drop it right after
+    row = pd.DataFrame([{**features, "Churn": "No"}])
+    clean_row, _ = clean_data(row)
+    return clean_row[feature_cols]
+
+
+def predict_churn_risk(customer_id_or_features, top_k=5) -> dict:
+    """predict churn risk for an existing customerID or a hypothetical dict.
+
+    returns {customer_id, risk_score, prediction_class, top_factors}. risk is
+    clamped to [0,1] so a wonky model output can't reach the agent as garbage."""
+    state = load_state()
+
+    if isinstance(customer_id_or_features, str):
+        customer_id = customer_id_or_features
+        row = state["clean_df"][state["clean_df"]["customerID"] == customer_id]
+        if row.empty:
+            raise ValueError(f"customerID {customer_id} not found")
+        X = row[state["feature_cols"]]
+    elif isinstance(customer_id_or_features, dict):
+        customer_id = None
+        X = _row_from_dict(customer_id_or_features, state["feature_cols"])
+    else:
+        raise TypeError("expected a customerID string or a feature dict")
+
+    X_enc = state["pre"].transform(X)
+    risk = float(state["model"].predict_proba(X_enc)[:, 1][0])
+    risk = max(0.0, min(1.0, risk))
+
+    factors = _shap_top_factors(state["explainer"], X_enc, state["feature_names"], top_k)
+
+    return {
+        "customer_id": customer_id,
+        "risk_score": round(risk, 4),
+        "prediction_class": "Churn" if risk >= 0.5 else "Stay",
+        "top_factors": factors,
+    }
+
+
+def train_and_save():
+    """one-shot: clean -> split -> encode -> train -> persist. for the app."""
+    clean, _ = clean_data(load_data())
+    Xtr, Xte, ytr, yte = split_data(clean)
+    Xtr_enc, Xte_enc, pre = encode(Xtr, Xte)
+    model, metrics = train_model(Xtr_enc, ytr, Xte_enc, yte)
+    save_artifacts(model, pre)
+    return metrics
