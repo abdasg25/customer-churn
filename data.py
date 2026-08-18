@@ -166,6 +166,22 @@ def clean_data(df):
     return out, log
 
 
+def split_data(df, test_size=0.2, seed=42):
+    """stratified train/test split on Churn.
+
+    X keeps the categoricals as strings; encoding happens in model.py where
+    the one-hot encoder is fit on train only. stratify keeps the 26.5% churn
+    ratio in both halves so a small fold can't accidentally drop churners."""
+    from sklearn.model_selection import train_test_split
+
+    X = df.drop(columns=["Churn", "customerID"])
+    y = df["Churn"]
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=test_size, stratify=y, random_state=seed
+    )
+    return X_train, X_test, y_train, y_test
+
+
 if __name__ == "__main__":
     import json
 
