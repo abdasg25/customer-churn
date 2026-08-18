@@ -77,3 +77,21 @@ where it is applied.
 ## Pending work (deferred to later tasks)
 - Feature engineering: encode categoricals, decide `SeniorCitizen`/binary
   handling, train/test split (Task 6), model + metric (Tasks 7–11).
+
+## Metric choice (justified before training)
+- **Class balance:** 73.5% `No` / 26.5% `Yes`. A model that always predicts
+  "No" scores 73.5% accuracy while catching 0 of the 1,869 churners.
+- **Business cost asymmetry:** a false negative (a real churner we miss) loses
+  a customer and all their future revenue; a false positive (a retention offer
+  sent to a happy customer) costs one cheap offer. So recall on the churn class
+  matters more than precision — but both matter, which is why we report F1 (the
+  harmonic mean of the two) rather than either alone.
+- **Why not accuracy:** it's dominated by the majority class, so it rewards the
+  useless all-"No" model.
+- **Why PR-AUC over ROC-AUC:** ROC-AUC can look great on imbalanced data because
+  it's dominated by true negatives (the abundant "No" class); PR-AUC focuses on
+  the minority (churn) class, which is what we actually care about.
+- **Decision:** primary metric is **F1 and PR-AUC on the churn class**, with
+  precision and recall broken out separately so the tradeoff stays visible
+  rather than hidden behind one number. Implemented in
+  `model.py: classification_report_churn()`.
