@@ -19,10 +19,10 @@ where it is applied.
   with no bill generated yet.
 - **Missingness mechanism:** NOT missing-at-random. Missing billing correlates
   perfectly with `tenure = 0`. This is a finding, not just an imputation step.
-- **Decision (Task 5):** fill `TotalCharges = MonthlyCharges * tenure` for these
-  rows (== `MonthlyCharges` at tenure 0, i.e. 0). Dropping 11/7043 (0.16%) is
-  the alternative; filling keeps the customers and matches the domain invariant
-  `TotalCharges ≈ MonthlyCharges × tenure`.
+- **Decision (Task 5):** fill `TotalCharges = 0` for these 11 rows (tenure 0 =
+  no completed billing cycle yet). Alternative is to drop them (0.16% of the
+  data) or fill with `MonthlyCharges` (the first month's bill). Going with 0
+  keeps the customers without inventing a revenue figure.
 
 ## Finding 2 — categorical encoding trap
 - The 6 internet add-on columns (`OnlineSecurity`, `OnlineBackup`,
@@ -35,11 +35,23 @@ where it is applied.
   own meaningful value (it encodes the fact the customer has no phone service,
   which is not the same as having a phone but no second line).
 
-## Finding 3 — no label leakage found (checked explicitly)
+## Finding 3 — near-duplicate rows (documented, not dropped)
+- Dropping `customerID`, there are **22 feature-duplicate rows across 20
+  groups** (42 rows total). These are distinct customers who happen to share
+  every feature value.
+- In every one of the 20 groups the `Churn` labels are identical, so they are
+  coincidental duplicates, not corrupted/inconsistent records.
+- **Decision:** keep them. They are real customers and dropping them would
+  remove legitimate signal.
+
+## Finding 4 — no label leakage found (checked explicitly)
 - No `cancellation_date`, `churn_date`, `days_since_last_login`, or
   `account_status` style columns exist (searched by name).
-- `TotalCharges` is cumulative lifetime billing (≤ `MonthlyCharges × tenure`),
-  so it is not a post-churn proxy — it is safe to keep.
+- `TotalCharges` is cumulative lifetime billing. It diverges from
+  `MonthlyCharges × tenure` (5,807 rows off by >5, max gap ~373) because
+  `MonthlyCharges` is the *current* rate and customers change plans over time.
+  That divergence is real signal, not a data-entry error. It is known at
+  prediction time, so it is not a post-churn proxy — safe to keep.
 - **Decision:** no columns dropped for leakage. The hunt is documented so the
   reasoning is auditable.
 
