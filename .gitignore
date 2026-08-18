@@ -27,10 +27,8 @@ Thumbs.db
 *.docx
 ~$*
 
-# Model artifacts / caches
-*.joblib
+# Model artifacts / caches (trained model is committed so the app runs offline)
 *.pkl
-models/
 .cache/
 
 # Test / coverage
