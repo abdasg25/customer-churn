@@ -1,8 +1,16 @@
 """Train/load the churn model, expose predict_churn_risk()."""
 
+import numpy as np
 from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import average_precision_score, f1_score, precision_score, recall_score
+from sklearn.metrics import (
+    average_precision_score,
+    confusion_matrix,
+    f1_score,
+    precision_recall_curve,
+    precision_score,
+    recall_score,
+)
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
@@ -110,6 +118,50 @@ def train_model(X_train_enc, y_train, X_test_enc, y_test, threshold=0.5):
     metrics["best_params"] = search.best_params_
     metrics["scale_pos_weight"] = round(scale, 3)
     return best, metrics
+
+
+def confusion_matrix_churn(y_true, y_proba, threshold=0.5):
+    """tn/fp/fn/tp at a threshold - read it as a business table, not a grid."""
+    y_pred = (y_proba >= threshold).astype(int)
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+    return {"tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp)}
+
+
+def best_threshold(y_true, y_proba):
+    """the threshold that maximises f1, from the precision-recall curve."""
+    precision, recall, thresholds = precision_recall_curve(y_true, y_proba)
+    precision, recall = precision[: len(thresholds)], recall[: len(thresholds)]
+    f1 = 2 * precision * recall / (precision + recall + 1e-12)
+    idx = int(np.argmax(f1))
+    return float(thresholds[idx]), float(f1[idx])
+
+
+def feature_importance_global(model, feature_names, top_k=None):
+    """gain-based feature importance from xgboost, sorted by importance."""
+    pairs = sorted(
+        zip(feature_names, model.feature_importances_),
+        key=lambda t: t[1], reverse=True,
+    )
+    if top_k:
+        pairs = pairs[:top_k]
+    return [{"feature": f, "importance": round(float(i), 4)} for f, i in pairs]
+
+
+def explain_prediction(model, X_row, feature_names, top_k=5):
+    """per-row shap values -> the factors that pushed risk up or down.
+
+    values are log-odds contributions: positive pushes risk up, negative down."""
+    import shap  # lazy: only needed when we actually explain something
+
+    explainer = shap.TreeExplainer(model)
+    sv = explainer.shap_values(X_row)
+    if isinstance(sv, list):
+        sv = sv[1]
+    contribs = sorted(
+        zip(feature_names, sv[0]),
+        key=lambda t: abs(float(t[1])), reverse=True,
+    )[:top_k]
+    return [{"feature": f, "contribution": round(float(c), 4)} for f, c in contribs]
 
 
 def predict_churn_risk(customer_id_or_features) -> dict:
