@@ -123,11 +123,11 @@ def run_data_query(args):
 
 
 def _call_predict(args):
-    """dispatch predict_churn_risk on customer_id or a hypothetical features dict."""
+    """dispatch predict_churn_risk on customer_id, a features dict, or overrides."""
     from model import predict_churn_risk
 
     if args.get("customer_id"):
-        return predict_churn_risk(args["customer_id"])
+        return predict_churn_risk(args["customer_id"], overrides=args.get("overrides"))
     if args.get("features"):
         return predict_churn_risk(args["features"])
     raise ValueError("provide either customer_id or features")
@@ -160,7 +160,9 @@ TOOLS = [
             "name": "predict_churn_risk",
             "description": (
                 "Predict churn risk for one customer: pass EITHER customer_id (string) "
-                "OR features (dict). Returns risk_score (0-1), prediction_class, top_factors."
+                "OR features (dict). Optionally pass overrides (dict) with a customer_id "
+                "to project that customer forward under different feature values. "
+                "Returns risk_score (0-1), prediction_class, top_factors."
             ),
             "parameters": {
                 "type": "object",
@@ -169,6 +171,10 @@ TOOLS = [
                     "features": {
                         "type": "object",
                         "description": "all raw feature values (see get_dataset_schema for names)",
+                    },
+                    "overrides": {
+                        "type": "object",
+                        "description": "feature changes to project a customer forward, e.g. {\"Contract\": \"Two year\"}",
                     },
                 },
             },

@@ -200,7 +200,8 @@ def load_state():
     if not _state:
         _state["model"] = joblib.load(MODEL_PATH)
         _state["pre"] = joblib.load(PREPROC_PATH)
-        _state["clean_df"] = clean_data(load_data())[0]
+        _state["raw_df"] = load_data()
+        _state["clean_df"] = clean_data(_state["raw_df"])[0]
         _state["feature_cols"] = [
             c for c in _state["clean_df"].columns if c not in ("customerID", "Churn")
         ]
@@ -241,8 +242,11 @@ def _row_from_dict(features, feature_cols):
     return clean_row[feature_cols]
 
 
-def predict_churn_risk(customer_id_or_features, top_k=5) -> dict:
+def predict_churn_risk(customer_id_or_features, top_k=5, overrides=None) -> dict:
     """predict churn risk for an existing customerID or a hypothetical dict.
+
+    pass overrides={...} with a customerID to project that customer forward
+    under different feature conditions (e.g. {"Contract": "Two year"}).
 
     returns {customer_id, risk_score, prediction_class, top_factors}. risk is
     clamped to [0,1] so a wonky model output can't reach the agent as garbage."""
@@ -250,10 +254,19 @@ def predict_churn_risk(customer_id_or_features, top_k=5) -> dict:
 
     if isinstance(customer_id_or_features, str):
         customer_id = customer_id_or_features
-        row = state["clean_df"][state["clean_df"]["customerID"] == customer_id]
-        if row.empty:
-            raise ValueError(f"customerID {customer_id} not found")
-        X = row[state["feature_cols"]]
+        if overrides:
+            # projected forward: start from the customer's raw features, then override
+            raw = state["raw_df"][state["raw_df"]["customerID"] == customer_id]
+            if raw.empty:
+                raise ValueError(f"customerID {customer_id} not found")
+            features = raw[state["feature_cols"]].iloc[0].to_dict()
+            features.update(overrides)
+            X = _row_from_dict(features, state["feature_cols"])
+        else:
+            row = state["clean_df"][state["clean_df"]["customerID"] == customer_id]
+            if row.empty:
+                raise ValueError(f"customerID {customer_id} not found")
+            X = row[state["feature_cols"]]
     elif isinstance(customer_id_or_features, dict):
         customer_id = None
         X = _row_from_dict(customer_id_or_features, state["feature_cols"])
@@ -268,12 +281,15 @@ def predict_churn_risk(customer_id_or_features, top_k=5) -> dict:
     for f in factors:
         f["feature"] = _prettify(f["feature"])
 
-    return {
+    result = {
         "customer_id": customer_id,
         "risk_score": round(risk, 4),
         "prediction_class": "Churn" if risk >= 0.5 else "Stay",
         "top_factors": factors,
     }
+    if overrides:
+        result["overrides"] = overrides
+    return result
 
 
 def train_and_save():

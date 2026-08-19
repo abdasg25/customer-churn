@@ -10,6 +10,7 @@ back to a real tool call**, never an LLM guess.
 - **EDA questions** — "what is the churn rate by contract type?", "which features correlate most with churn?"
 - **Per-customer risk** — "what's the churn risk for customer 7590-VHVEG?", with the top factors (SHAP) that drove the score.
 - **Hypothetical data points** — submit a full feature dict and see how the model scores it against the original data.
+- **Projected forward** — take an existing customer and override feature values ("7590-VHVEG if they moved to a two-year contract") to see the counterfactual risk.
 - **Aggregate risk across segments** — "average monthly charges for customers with risk > 0.7?" (the dataset exposes a model-computed `risk_score` column).
 
 ## Architecture
