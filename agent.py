@@ -19,11 +19,13 @@ SYSTEM_PROMPT = (
 
 NUMBER_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?%?")
 
+# the model emits many unicode dash/minus variants; normalise them all to "-"
+_DASH_TRANS = str.maketrans({c: "-" for c in "\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFE63\uFF0D"})
+
 
 def _extract_numbers(text):
     out = []
-    # normalise unicode dashes/minus so "-0.35" written as "\u20130.35" is read as negative
-    text = (text or "").replace("\u2212", "-").replace("\u2013", "-").replace("\u2014", "-")
+    text = (text or "").translate(_DASH_TRANS)
     for tok in NUMBER_RE.findall(text):
         t = tok.replace(",", "").rstrip("%")
         try:
@@ -51,13 +53,18 @@ def _grounded(n, output_nums):
     return False
 
 
-def validate_answer(answer, log):
+def validate_answer(answer, log, context=""):
     """check every number in the answer traces to a tool output.
 
-    returns {"ok", "violations", "checked_numbers"}. heuristic, not a proof."""
+    numbers restated from the conversation (thresholds like 0.7 or $10,000)
+    are allowed too. returns {"ok", "violations", "checked_numbers"}."""
     output_nums = _extract_numbers(_tool_output_text(log))
+    context_nums = _extract_numbers(context)
     nums = _extract_numbers(answer)
-    violations = [n for n in nums if not _grounded(n, output_nums)]
+    violations = [
+        n for n in nums
+        if not _grounded(n, context_nums) and not _grounded(n, output_nums)
+    ]
     return {"ok": not violations, "violations": violations, "checked_numbers": nums}
 
 
@@ -67,7 +74,7 @@ def _loop(messages, log, max_iterations):
         resp = llm.call(messages, tools=TOOLS)
 
         if not resp.get("tool_calls"):
-            return resp.get("content", "")
+            return (resp.get("content") or "").strip() or "I can't help with that request."
 
         messages.append(resp)
         for tc in resp["tool_calls"]:
@@ -94,16 +101,22 @@ def _loop(messages, log, max_iterations):
     return "I couldn't finish this within the tool-call limit."
 
 
-def run(question, max_iterations=MAX_ITERATIONS):
-    """full run with the verify gate. returns {answer, execution_log, verification}."""
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": question},
-    ]
+def run(question, history=None, max_iterations=MAX_ITERATIONS):
+    """full run with the verify gate. history is prior user/assistant turns so
+    follow-ups like 'how many of those...' can refer back. returns
+    {answer, execution_log, verification}."""
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    context_parts = []
+    for m in (history or []):
+        if m.get("role") in ("user", "assistant") and m.get("content"):
+            messages.append({"role": m["role"], "content": m["content"]})
+            context_parts.append(m["content"])
+    messages.append({"role": "user", "content": question})
+    context = " ".join(context_parts) + " " + question
     log = []
 
     answer = _loop(messages, log, max_iterations)
-    check = validate_answer(answer, log)
+    check = validate_answer(answer, log, context)
 
     # one corrective retry if the answer has ungrounded numbers
     if check["violations"] and check["checked_numbers"]:
@@ -114,7 +127,7 @@ def run(question, max_iterations=MAX_ITERATIONS):
             + ". Recompute them with a tool or drop them, then answer again."
         )})
         answer2 = _loop(messages, log, max_iterations)
-        check2 = validate_answer(answer2, log)
+        check2 = validate_answer(answer2, log, context)
         if not check2["violations"]:
             answer, check = answer2, check2
 

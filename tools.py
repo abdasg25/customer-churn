@@ -159,24 +159,16 @@ TOOLS = [
         "function": {
             "name": "predict_churn_risk",
             "description": (
-                "Predict the probability a customer churns. Pass EITHER customer_id "
-                "(string, an existing customerID from the dataset) OR features (an object "
-                "of the customer's attributes in raw schema). Returns risk_score (0-1), "
-                "prediction_class ('Churn'/'Stay'), and top_factors (what drove the score)."
+                "Predict churn risk for one customer: pass EITHER customer_id (string) "
+                "OR features (dict). Returns risk_score (0-1), prediction_class, top_factors."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "customer_id": {"type": "string", "description": "existing customerID to look up"},
+                    "customer_id": {"type": "string", "description": "existing customerID"},
                     "features": {
                         "type": "object",
-                        "description": (
-                            "full set of 19 raw features: gender, SeniorCitizen, Partner, "
-                            "Dependents, tenure, PhoneService, MultipleLines, InternetService, "
-                            "OnlineSecurity, OnlineBackup, DeviceProtection, TechSupport, "
-                            "StreamingTV, StreamingMovies, Contract, PaperlessBilling, "
-                            "PaymentMethod, MonthlyCharges, TotalCharges"
-                        ),
+                        "description": "all raw feature values (see get_dataset_schema for names)",
                     },
                 },
             },
@@ -187,11 +179,9 @@ TOOLS = [
         "function": {
             "name": "run_data_query",
             "description": (
-                "Run a pandas expression against the dataset (variable 'df', plus pd and np). "
-                "Use for aggregations, filters, group-bys, correlations, distributions. "
-                "The Churn column is 'Yes'/'No' and risk_score is the model's predicted "
-                "churn probability (0-1). If unsure of column names, call "
-                "get_dataset_schema first. Returns the result string or an error."
+                "Run a pandas expression against 'df' (plus pd, np). For filters, group-bys, "
+                "aggregations, correlations. Churn is 'Yes'/'No', risk_score is 0-1. "
+                "Call get_dataset_schema if unsure of columns. Returns result or an error."
             ),
             "parameters": {
                 "type": "object",

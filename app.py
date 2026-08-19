@@ -68,6 +68,10 @@ if st.session_state.pending:
     st.session_state.pending = None
 
 if question:
+    history = [
+        {"role": m["role"], "content": m["content"]}
+        for m in st.session_state.messages
+    ]
     st.session_state.messages.append({"role": "user", "content": question})
     with st.chat_message("user"):
         st.markdown(question)
@@ -75,7 +79,7 @@ if question:
     with st.chat_message("assistant"):
         with st.spinner("thinking..."):
             try:
-                result = agent.run(question)
+                result = agent.run(question, history=history)
                 answer = result.get("answer") or "(no answer returned)"
                 trace = _trace_parts(result)
                 verification = result.get("verification", {})
