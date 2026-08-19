@@ -205,9 +205,25 @@ def load_state():
             c for c in _state["clean_df"].columns if c not in ("customerID", "Churn")
         ]
         _state["feature_names"] = _state["pre"].get_feature_names_out()
-        import shap
-        _state["explainer"] = shap.TreeExplainer(_state["model"])
     return _state
+
+
+def _get_explainer(state):
+    # built lazily: bulk prediction doesn't need it, per-row explanation does
+    if "explainer" not in state:
+        import shap
+
+        state["explainer"] = shap.TreeExplainer(state["model"])
+    return state["explainer"]
+
+
+def bulk_risk_scores():
+    """predicted churn probability for every customer (no SHAP, one batched call)."""
+    state = load_state()
+    X = state["clean_df"][state["feature_cols"]]
+    X_enc = state["pre"].transform(X)
+    proba = state["model"].predict_proba(X_enc)[:, 1]
+    return pd.Series(proba, index=state["clean_df"]["customerID"].values, name="risk_score")
 
 
 def _row_from_dict(features, feature_cols):
@@ -248,7 +264,7 @@ def predict_churn_risk(customer_id_or_features, top_k=5) -> dict:
     risk = float(state["model"].predict_proba(X_enc)[:, 1][0])
     risk = max(0.0, min(1.0, risk))
 
-    factors = _shap_top_factors(state["explainer"], X_enc, state["feature_names"], top_k)
+    factors = _shap_top_factors(_get_explainer(state), X_enc, state["feature_names"], top_k)
     for f in factors:
         f["feature"] = _prettify(f["feature"])
 

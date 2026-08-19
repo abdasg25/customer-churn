@@ -44,14 +44,16 @@ _df_cache = {}
 def _df():
     """lazy-load a readable dataframe for EDA queries.
 
-    raw data + numeric TotalCharges, so categoricals keep their original
-    values (e.g. 'Month-to-month' not 0). the model's encoded df stays inside
-    model.py; this one is for the agent to describe/query the dataset."""
+    raw data + numeric TotalCharges, plus a model-computed risk_score column so
+    the agent can filter/aggregate by predicted churn risk. categoricals keep
+    their original values (e.g. 'Month-to-month' not 0)."""
     if "df" not in _df_cache:
         from data import load_data
+        from model import bulk_risk_scores
 
         raw = load_data()
         raw["TotalCharges"] = pd.to_numeric(raw["TotalCharges"], errors="coerce").fillna(0.0)
+        raw["risk_score"] = bulk_risk_scores().reindex(raw["customerID"]).values
         _df_cache["df"] = raw
     return _df_cache["df"]
 
@@ -187,7 +189,8 @@ TOOLS = [
             "description": (
                 "Run a pandas expression against the dataset (variable 'df', plus pd and np). "
                 "Use for aggregations, filters, group-bys, correlations, distributions. "
-                "The Churn column is 'Yes'/'No'. If unsure of column names, call "
+                "The Churn column is 'Yes'/'No' and risk_score is the model's predicted "
+                "churn probability (0-1). If unsure of column names, call "
                 "get_dataset_schema first. Returns the result string or an error."
             ),
             "parameters": {
