@@ -23,7 +23,8 @@ def _get_client():
         key = os.getenv(API_KEY_ENV)
         if not key:
             raise RuntimeError(
-                f"{API_KEY_ENV} is not set. Export it (or add it to .env) before running the agent."
+                f"{API_KEY_ENV} is not set. Locally: add it to a .env file. "
+                "On Streamlit Cloud: add it under Settings -> Secrets, then Reboot."
             )
         _client = Groq(api_key=key)
     return _client

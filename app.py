@@ -90,7 +90,10 @@ if question:
                 verification = result.get("verification", {})
             except Exception as e:
                 if "GROQ_API_KEY" in str(e):
-                    answer = "The LLM API key isn't set. Add GROQ_API_KEY to a .env file and restart."
+                    answer = (
+                        "The LLM API key isn't set. On Streamlit Cloud add GROQ_API_KEY "
+                        "under Settings -> Secrets and Reboot; locally add it to a .env file."
+                    )
                 else:
                     answer = f"Sorry, I hit an error and can't answer that right now ({type(e).__name__})."
                 trace, verification = [], {}
