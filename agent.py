@@ -22,7 +22,9 @@ NUMBER_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?%?")
 
 def _extract_numbers(text):
     out = []
-    for tok in NUMBER_RE.findall(text or ""):
+    # normalise unicode dashes/minus so "-0.35" written as "\u20130.35" is read as negative
+    text = (text or "").replace("\u2212", "-").replace("\u2013", "-").replace("\u2014", "-")
+    for tok in NUMBER_RE.findall(text):
         t = tok.replace(",", "").rstrip("%")
         try:
             out.append(float(t))
@@ -69,8 +71,8 @@ def _loop(messages, log, max_iterations):
 
         messages.append(resp)
         for tc in resp["tool_calls"]:
-            name = tc["name"]
-            args = llm.parse_arguments(tc["arguments"])
+            name = tc["function"]["name"]
+            args = llm.parse_arguments(tc["function"]["arguments"])
 
             if args is None:
                 result = {"status": "error", "error": "malformed tool arguments"}

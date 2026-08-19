@@ -43,7 +43,14 @@ def call(messages, tools=None, temperature=0.0):
     out = {"role": "assistant", "content": msg.content or ""}
     if msg.tool_calls:
         out["tool_calls"] = [
-            {"id": tc.id, "name": tc.function.name, "arguments": tc.function.arguments or "{}"}
+            {
+                "id": tc.id,
+                "type": "function",
+                "function": {
+                    "name": tc.function.name,
+                    "arguments": tc.function.arguments or "{}",
+                },
+            }
             for tc in msg.tool_calls
         ]
     return out
