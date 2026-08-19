@@ -92,11 +92,12 @@ def _format(result):
     return str(result)[:2000]
 
 
-def run_data_query(code):
-    """execute a pandas snippet against the cleaned df in a locked namespace.
+def run_data_query(args):
+    """execute a pandas snippet against the dataset in a locked namespace.
 
-    available names: df (cleaned data), pd, np, and the safe builtins.
+    args = {"code": "..."}. available names: df, pd, np, safe builtins.
     returns {status, output, ...} - errors are captured, never raised."""
+    code = (args or {}).get("code", "")
     if not isinstance(code, str) or not code.strip():
         return {"status": "error", "error": "empty query"}
 
