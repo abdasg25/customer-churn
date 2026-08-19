@@ -1,8 +1,13 @@
 """Streamlit chat UI. Calls only the agent layer, never the model or tools."""
 
 import json
+import os
 
 import streamlit as st
+
+# on Streamlit Cloud the key comes from the Secrets UI, not a .env file
+if "GROQ_API_KEY" in st.secrets:
+    os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
 
 import agent
 

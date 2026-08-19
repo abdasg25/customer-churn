@@ -25,6 +25,7 @@ Thumbs.db
 
 # Personal planning docs (not part of the deliverable)
 *.docx
+*.pdf
 ~$*
 
 # Model artifacts / caches (trained model is committed so the app runs offline)

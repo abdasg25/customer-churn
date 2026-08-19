@@ -1,0 +1,12 @@
+.venv/
+.git/
+.env
+__pycache__/
+*.pyc
+*.docx
+*.pdf
+~$*
+notebooks/
+tests/
+.idea/
+.vscode/
