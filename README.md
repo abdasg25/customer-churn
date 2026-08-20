@@ -3,7 +3,7 @@
 A take-home assessment for Adept Tech Solutions. An agentic chat app over a
 customer-churn dataset. The user asks natural-language questions; the agent
 plans, computes via tools, and self-checks — **every number in an answer traces
-back to a real tool call**, never an LLM guess.
+back to a real tool call**.
 
 ## What it can answer
 
@@ -77,7 +77,7 @@ line is inspectable).
   number from it and checks each traces to a tool output (or to the conversation
   context, for thresholds like "0.7"). Ungrounded numbers trigger one corrective
   retry ("recompute or drop"), then a final check. Errors and empty results are
-  surfaced, never papered over.
+  surfaced.
 
 **Multi-turn memory**: `run(question, history=...)` carries prior turns, so
 follow-ups like "how many of *those* have month-to-month contracts?" resolve
@@ -114,7 +114,7 @@ Built with an AI coding assistant (opencode / `deepseek-v4-pro`) throughout:
 scaffolding, module code, debugging, and the eval test battery. All design
 decisions — the metric choice, the sandboxing approach, the verification
 mechanism — were reasoned through and are explained in this README and
-`DATA_NOTES.md`. I can explain any part of the submission in a follow-up.
+`DATA_NOTES.md`.
 
 ## Known limitations
 
